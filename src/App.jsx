@@ -2,6 +2,22 @@ import { useState, useEffect } from 'react';
 import './App.css';
 import { questions as allQuestions } from './questions';
 
+const BATCH_SIZE = 30;
+const BATCH_COUNT = Math.ceil(allQuestions.length / BATCH_SIZE);
+
+const BATCH_LABELS = [
+  "第1弾 (Q1〜Q30: JSONと自動化の基礎)",
+  "第2弾 (Q31〜Q60: APIと認証の基礎)",
+  "第3弾 (Q61〜Q90: 冪等性とエラー制御)",
+  "第4弾 (Q91〜Q120: 正規表現とデータ抽出)",
+  "第5弾 (Q121〜Q150: OAuthと配列処理)",
+  "第6弾 (Q151〜Q180: 高度なJSON構造設計)",
+  "第7弾 (Q181〜Q210: AIプロンプトのシステム化)",
+  "第8弾 (Q211〜Q240: アーキテクチャと運用思想)",
+  "第9弾 (Q241〜Q270: データベースと非同期処理)",
+  "第10弾 (Q271〜Q300: 最新インフラと自動化哲学)",
+];
+
 function App() {
   const [isStarted, setIsStarted] = useState(() => {
     const hasProgress = localStorage.getItem('promptDojo_index') !== null || 
@@ -17,11 +33,26 @@ function App() {
   const [wrongQuestionIds, setWrongQuestionIds] = useState([]);
   const [isRetryMode, setIsRetryMode] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(0);
+  const [currentBatch, setCurrentBatch] = useState(0);
 
-  // Filter questions based on mode
+  // バッチ（章）ごとの問題リストを取得
+  const getBatchQuestions = (batchIndex) => {
+    const start = batchIndex * BATCH_SIZE;
+    const end = Math.min(start + BATCH_SIZE, allQuestions.length);
+    return allQuestions.slice(start, end);
+  };
+
+  // バッチごとの間違い問題を取得
+  const getBatchWrongQuestions = (batchIndex) => {
+    const batchQuestions = getBatchQuestions(batchIndex);
+    const batchIds = batchQuestions.map(q => q.id);
+    return allQuestions.filter(q => batchIds.includes(q.id) && wrongQuestionIds.includes(q.id));
+  };
+
+  // 現在のモードに応じた問題リスト
   const currentQuestionList = isRetryMode 
-    ? allQuestions.filter(q => wrongQuestionIds.includes(q.id))
-    : allQuestions;
+    ? getBatchWrongQuestions(currentBatch)
+    : getBatchQuestions(currentBatch);
 
   // Load state from local storage on mount
   useEffect(() => {
@@ -29,9 +60,14 @@ function App() {
     const savedScore = localStorage.getItem('promptDojo_score');
     const savedWrongs = localStorage.getItem('promptDojo_wrong_ids');
     const savedRetry = localStorage.getItem('promptDojo_retry_mode');
+    const savedBatch = localStorage.getItem('promptDojo_batch');
 
     if (savedWrongs) {
       setWrongQuestionIds(JSON.parse(savedWrongs));
+    }
+
+    if (savedBatch !== null) {
+      setCurrentBatch(parseInt(savedBatch, 10));
     }
 
     if (savedRetry === 'true') {
@@ -40,12 +76,13 @@ function App() {
     } else {
       if (savedIndex && savedScore) {
         const idx = parseInt(savedIndex, 10);
-        if (idx < allQuestions.length) {
-          setCurrentQuestionIndex(idx);
-          setScore(parseInt(savedScore, 10));
-        } else {
+        setCurrentQuestionIndex(idx);
+        setScore(parseInt(savedScore, 10));
+        // Check if finished
+        const batch = savedBatch !== null ? parseInt(savedBatch, 10) : 0;
+        const batchLen = getBatchQuestions(batch).length;
+        if (idx >= batchLen) {
           setIsFinished(true);
-          setScore(parseInt(savedScore, 10));
         }
       }
     }
@@ -56,7 +93,7 @@ function App() {
   };
 
   const handleOptionClick = (index) => {
-    if (showExplanation) return; // Prevent clicking after selection
+    if (showExplanation) return;
 
     setSelectedOption(index);
     setShowExplanation(true);
@@ -73,13 +110,11 @@ function App() {
         setScore(newScore);
         localStorage.setItem('promptDojo_score', newScore);
       } else {
-        // Remove from wrongs if answered correctly in retry mode
         newWrongs = newWrongs.filter(id => id !== questionText.id);
         setWrongQuestionIds(newWrongs);
         localStorage.setItem('promptDojo_wrong_ids', JSON.stringify(newWrongs));
       }
     } else {
-      // If wrong, add to wrongs (if not already there)
       if (!newWrongs.includes(questionText.id)) {
         newWrongs.push(questionText.id);
         setWrongQuestionIds(newWrongs);
@@ -102,13 +137,15 @@ function App() {
     }
   };
 
-  const startRetryMode = () => {
+  const startRetryMode = (batchIndex) => {
     setIsRetryMode(true);
+    setCurrentBatch(batchIndex);
     setCurrentQuestionIndex(0);
     setIsFinished(false);
     setSelectedOption(null);
     setShowExplanation(false);
     localStorage.setItem('promptDojo_retry_mode', 'true');
+    localStorage.setItem('promptDojo_batch', batchIndex);
     localStorage.setItem('promptDojo_index', 0);
   };
 
@@ -120,33 +157,38 @@ function App() {
     setIsFinished(false);
     setIsRetryMode(false);
     setWrongQuestionIds([]);
-    setIsStarted(true); // Go back to question 1, skipping the welcome screen
+    setCurrentBatch(0);
+    setIsStarted(true);
     localStorage.removeItem('promptDojo_index');
     localStorage.removeItem('promptDojo_score');
     localStorage.removeItem('promptDojo_wrong_ids');
     localStorage.removeItem('promptDojo_retry_mode');
+    localStorage.removeItem('promptDojo_batch');
   };
 
   const resetToHome = () => {
     resetQuiz();
-    setIsStarted(false); // Back to very beginning
+    setIsStarted(false);
   };
 
   const quitCurrentMode = () => {
     if (isRetryMode) {
-      // 復習モードを中断して、リザルト画面へ戻る
       setIsRetryMode(false);
       setIsFinished(true);
       localStorage.removeItem('promptDojo_retry_mode');
     } else {
-      // 通常モードを諦めてトップへ戻る
       if (window.confirm("現在の進行状況やスコアがリセットされます。中断してトップに戻りますか？")) {
         resetToHome();
       }
     }
   };
 
+  // ====== トップ画面 ======
   if (!isStarted) {
+    // 各章ごとの間違い数を計算
+    const batchWrongCounts = Array.from({ length: BATCH_COUNT }, (_, i) => getBatchWrongQuestions(i).length);
+    const totalWrongs = wrongQuestionIds.length;
+
     return (
       <div className="app-container">
         <header>
@@ -172,39 +214,32 @@ function App() {
             </p>
           </div>
 
+          {/* 章選択セクション */}
           <div style={{ marginBottom: '25px', backgroundColor: '#161b22', padding: '20px', borderRadius: '8px', border: '1px solid #30363d' }}>
-            <h3 style={{ fontSize: '1.0rem', marginBottom: '15px', color: '#8b949e' }}>▼ 学習を始める章を選ぶ（30問ずつ）</h3>
+            <h3 style={{ fontSize: '1.0rem', marginBottom: '15px', color: '#8b949e' }}>📘 学習を始める章を選ぶ（30問ずつ）</h3>
             <select 
               value={selectedBatch} 
               onChange={(e) => setSelectedBatch(parseInt(e.target.value, 10))}
               style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#0d1117', color: '#c9d1d9', border: '1px solid #30363d', marginBottom: '15px', fontSize: '0.95rem' }}
             >
-              <option value={0}>第1弾 (Q1〜Q30: JSONと自動化の基礎)</option>
-              <option value={1}>第2弾 (Q31〜Q60: APIと認証の基礎)</option>
-              <option value={2}>第3弾 (Q61〜Q90: 冪等性とエラー制御)</option>
-              <option value={3}>第4弾 (Q91〜Q120: 正規表現とデータ抽出)</option>
-              <option value={4}>第5弾 (Q121〜Q150: OAuthと配列処理)</option>
-              <option value={5}>第6弾 (Q151〜Q180: 高度なJSON構造設計)</option>
-              <option value={6}>第7弾 (Q181〜Q210: AIプロンプトのシステム化)</option>
-              <option value={7}>第8弾 (Q211〜Q240: アーキテクチャと運用思想)</option>
-              <option value={8}>第9弾 (Q241〜Q270: データベースと非同期処理)</option>
-              <option value={9}>第10弾 (Q271〜Q300: 最新インフラと自動化哲学)</option>
+              {BATCH_LABELS.map((label, i) => (
+                <option key={i} value={i}>{label}</option>
+              ))}
             </select>
             <button 
               className="primary-btn" 
               onClick={() => {
-                const startIndex = selectedBatch * 30;
-                setCurrentQuestionIndex(startIndex);
+                setCurrentBatch(selectedBatch);
+                setCurrentQuestionIndex(0);
                 setScore(0);
                 setSelectedOption(null);
                 setShowExplanation(false);
                 setIsFinished(false);
                 setIsRetryMode(false);
-                setWrongQuestionIds([]);
                 setIsStarted(true);
-                localStorage.setItem('promptDojo_index', startIndex);
+                localStorage.setItem('promptDojo_batch', selectedBatch);
+                localStorage.setItem('promptDojo_index', 0);
                 localStorage.setItem('promptDojo_score', 0);
-                localStorage.removeItem('promptDojo_wrong_ids');
                 localStorage.removeItem('promptDojo_retry_mode');
               }} 
               style={{ width: '100%' }}
@@ -213,7 +248,37 @@ function App() {
             </button>
           </div>
 
-          {(localStorage.getItem('promptDojo_index') !== null || localStorage.getItem('promptDojo_score') !== null || localStorage.getItem('promptDojo_wrong_ids') !== null) && (
+          {/* 復習セクション */}
+          {totalWrongs > 0 && (
+            <div style={{ marginBottom: '25px', backgroundColor: '#1c1410', padding: '20px', borderRadius: '8px', border: '1px solid #d2992244' }}>
+              <h3 style={{ fontSize: '1.0rem', marginBottom: '15px', color: '#d29922' }}>🔄 間違えた問題を復習する（全{totalWrongs}問）</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {BATCH_LABELS.map((label, i) => {
+                  const wrongCount = batchWrongCounts[i];
+                  if (wrongCount === 0) return null;
+                  return (
+                    <button
+                      key={i}
+                      className="primary-btn"
+                      onClick={() => startRetryMode(i)}
+                      style={{ 
+                        width: '100%', 
+                        backgroundColor: '#d29922', 
+                        fontSize: '0.9rem', 
+                        padding: '12px 15px',
+                        textAlign: 'left'
+                      }}
+                    >
+                      {label.split('(')[0]}— {wrongCount}問を復習
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 続きから再開 */}
+          {(localStorage.getItem('promptDojo_index') !== null || localStorage.getItem('promptDojo_score') !== null) && (
             <button 
               className="primary-btn" 
               onClick={handleStart} 
@@ -228,8 +293,12 @@ function App() {
     );
   }
 
+  // ====== 完了画面 ======
   if (isFinished) {
-    if (isRetryMode && wrongQuestionIds.length === 0) {
+    const batchLabel = BATCH_LABELS[currentBatch] || `第${currentBatch + 1}弾`;
+    const batchWrongCount = getBatchWrongQuestions(currentBatch).length;
+
+    if (isRetryMode && batchWrongCount === 0) {
       return (
         <div className="app-container">
           <header>
@@ -237,13 +306,10 @@ function App() {
           </header>
           <div className="card center-content">
             <h2>素晴らしい！👏</h2>
-            <p>間違えた問題をすべてマスターしました。</p>
-            <button className="primary-btn" onClick={resetQuiz} style={{marginTop: '20px'}}>
-              全体を最初からやり直す
+            <p>{batchLabel.split('(')[0]}の間違い問題をすべてマスターしました。</p>
+            <button className="primary-btn" onClick={resetToHome} style={{marginTop: '20px'}}>
+              トップ画面に戻る
             </button>
-            <div style={{marginTop: '25px'}}>
-              <a href="#" onClick={(e) => { e.preventDefault(); resetToHome(); }} style={{color: 'var(--accent-color)', fontSize: '0.9rem', textDecoration: 'none'}}>トップ画面（解説）に戻る</a>
-            </div>
           </div>
         </div>
       );
@@ -252,47 +318,55 @@ function App() {
     return (
       <div className="app-container">
         <header>
-          <h1>{isRetryMode ? "復習セッション終了" : "学習完了！"}</h1>
+          <h1>{isRetryMode ? "復習セッション終了" : `${batchLabel.split('(')[0]}完了！`}</h1>
         </header>
         <div className="card center-content">
           <h2>お疲れ様でした。</h2>
-          {!isRetryMode && <p>あなたのスコア: {score} / {allQuestions.length}</p>}
-          {wrongQuestionIds.length > 0 ? (
-            <p>まだマスターしていない問題が {wrongQuestionIds.length} 問あります。</p>
-          ) : (
-            <p>全問正解です！完璧です。</p>
+          {!isRetryMode && <p>スコア: {score} / {getBatchQuestions(currentBatch).length}</p>}
+          
+          {batchWrongCount > 0 && (
+            <>
+              <p>この章でまだマスターしていない問題が {batchWrongCount} 問あります。</p>
+              <button className="primary-btn" onClick={() => startRetryMode(currentBatch)} style={{marginTop: '20px', backgroundColor: '#d29922'}}>
+                この章の間違いを復習する
+              </button>
+            </>
+          )}
+          {batchWrongCount === 0 && !isRetryMode && (
+            <p>この章は全問正解です！完璧です。🎉</p>
           )}
 
-          {wrongQuestionIds.length > 0 && (
-            <button className="primary-btn" onClick={startRetryMode} style={{marginTop: '20px', backgroundColor: '#d29922'}}>
-              間違えた問題を復習する
-            </button>
-          )}
-
-          <button className="primary-btn" onClick={resetQuiz} style={{marginTop: '20px', marginLeft: '10px', backgroundColor: '#58a6ff'}}>
-            最初からやり直す
+          <button className="primary-btn" onClick={resetToHome} style={{marginTop: '15px', backgroundColor: '#58a6ff'}}>
+            トップ画面に戻る（別の章を選ぶ）
           </button>
-
-          <div style={{marginTop: '25px'}}>
-            <a href="#" onClick={(e) => { e.preventDefault(); resetToHome(); }} style={{color: 'var(--accent-color)', fontSize: '0.9rem', textDecoration: 'none'}}>トップ画面（解説）に戻る</a>
-          </div>
         </div>
       </div>
     );
   }
 
-  // If there are no questions in retry mode (edge case)
+  // ====== 問題がない場合 ======
   if (currentQuestionList.length === 0) {
-    return <div className="app-container">読み込み中...</div>;
+    return (
+      <div className="app-container">
+        <div className="card center-content">
+          <h2>この章に間違えた問題はありません 🎉</h2>
+          <button className="primary-btn" onClick={resetToHome} style={{marginTop: '20px'}}>
+            トップ画面に戻る
+          </button>
+        </div>
+      </div>
+    );
   }
 
+  // ====== クイズ画面 ======
   const currentQuestion = currentQuestionList[currentQuestionIndex];
   const progressPercentage = ((currentQuestionIndex) / currentQuestionList.length) * 100;
+  const batchLabel = BATCH_LABELS[currentBatch] || `第${currentBatch + 1}弾`;
 
   return (
     <div className="app-container">
       <header>
-        <h1>{isRetryMode ? "復習モード" : "自動化・AI連携マスター"}</h1>
+        <h1>{isRetryMode ? `復習モード` : `${batchLabel.split('(')[0].trim()}`}</h1>
         <div className="score-display">
           問題 {currentQuestionIndex + 1} / {currentQuestionList.length} 
           {!isRetryMode && ` | スコア: ${score}`}
@@ -305,7 +379,7 @@ function App() {
 
       <div className="card">
         <div className="question-title">
-          {isRetryMode ? `復習問題 ID:${currentQuestion.id}` : `Stage ${currentQuestionIndex + 1}`} : {currentQuestion.title}
+          {isRetryMode ? `復習 Q${currentQuestion.id}` : `Q${currentQuestion.id}`} : {currentQuestion.title}
         </div>
         <div className="question-text">{currentQuestion.question}</div>
         
@@ -345,7 +419,7 @@ function App() {
 
       <div style={{textAlign: 'center', marginTop: '10px', paddingBottom: '20px'}}>
         <a href="#" onClick={(e) => { e.preventDefault(); quitCurrentMode(); }} style={{color: '#8b949e', fontSize: '0.9rem', textDecoration: 'underline'}}>
-          {isRetryMode ? "復習を中断してスコア画面に戻る" : "学習を中断してトップに戻る"}
+          {isRetryMode ? "復習を中断してトップに戻る" : "学習を中断してトップに戻る"}
         </a>
       </div>
     </div>
