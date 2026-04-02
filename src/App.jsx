@@ -34,6 +34,7 @@ function App() {
   const [isRetryMode, setIsRetryMode] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(0);
   const [currentBatch, setCurrentBatch] = useState(0);
+  const [retrySessionIds, setRetrySessionIds] = useState([]);
 
   // バッチ（章）ごとの問題リストを取得
   const getBatchQuestions = (batchIndex) => {
@@ -51,7 +52,7 @@ function App() {
 
   // 現在のモードに応じた問題リスト
   const currentQuestionList = isRetryMode 
-    ? getBatchWrongQuestions(currentBatch)
+    ? allQuestions.filter(q => retrySessionIds.includes(q.id))
     : getBatchQuestions(currentBatch);
 
   // Load state from local storage on mount
@@ -61,9 +62,14 @@ function App() {
     const savedWrongs = localStorage.getItem('promptDojo_wrong_ids');
     const savedRetry = localStorage.getItem('promptDojo_retry_mode');
     const savedBatch = localStorage.getItem('promptDojo_batch');
+    const savedRetrySession = localStorage.getItem('promptDojo_retry_session');
 
     if (savedWrongs) {
       setWrongQuestionIds(JSON.parse(savedWrongs));
+    }
+
+    if (savedRetrySession) {
+      setRetrySessionIds(JSON.parse(savedRetrySession));
     }
 
     if (savedBatch !== null) {
@@ -144,6 +150,9 @@ function App() {
     setIsFinished(false);
     setSelectedOption(null);
     setShowExplanation(false);
+    const wrongsInBatch = getBatchWrongQuestions(batchIndex).map(q => q.id);
+    setRetrySessionIds(wrongsInBatch);
+    localStorage.setItem('promptDojo_retry_session', JSON.stringify(wrongsInBatch));
     localStorage.setItem('promptDojo_retry_mode', 'true');
     localStorage.setItem('promptDojo_batch', batchIndex);
     localStorage.setItem('promptDojo_index', 0);
@@ -158,12 +167,14 @@ function App() {
     setIsRetryMode(false);
     setWrongQuestionIds([]);
     setCurrentBatch(0);
+    setRetrySessionIds([]);
     setIsStarted(true);
     localStorage.removeItem('promptDojo_index');
     localStorage.removeItem('promptDojo_score');
     localStorage.removeItem('promptDojo_wrong_ids');
     localStorage.removeItem('promptDojo_retry_mode');
     localStorage.removeItem('promptDojo_batch');
+    localStorage.removeItem('promptDojo_retry_session');
   };
 
   const resetToHome = () => {
@@ -175,7 +186,9 @@ function App() {
     if (isRetryMode) {
       setIsRetryMode(false);
       setIsFinished(true);
+      setRetrySessionIds([]);
       localStorage.removeItem('promptDojo_retry_mode');
+      localStorage.removeItem('promptDojo_retry_session');
     } else {
       if (window.confirm("現在の進行状況やスコアがリセットされます。中断してトップに戻りますか？")) {
         resetToHome();
