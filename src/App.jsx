@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import { questions as allQuestions } from './questions';
 
@@ -373,6 +373,20 @@ function App() {
 
   // ====== クイズ画面 ======
   const currentQuestion = currentQuestionList[currentQuestionIndex];
+  
+  const shuffledOptions = useMemo(() => {
+    if (!currentQuestion) return [];
+    const indices = Array.from({ length: currentQuestion.options.length }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return indices.map(idx => ({
+      originalIndex: idx,
+      text: currentQuestion.options[idx]
+    }));
+  }, [currentQuestion?.id]);
+
   const progressPercentage = ((currentQuestionIndex) / currentQuestionList.length) * 100;
   const batchLabel = BATCH_LABELS[currentBatch] || `第${currentBatch + 1}弾`;
 
@@ -397,12 +411,12 @@ function App() {
         <div className="question-text">{currentQuestion.question}</div>
         
         <div className="options-list">
-          {currentQuestion.options.map((option, index) => {
+          {shuffledOptions.map((opt, index) => {
             let btnClass = "option-btn";
             if (showExplanation) {
-              if (index === currentQuestion.correctAnswer) {
+              if (opt.originalIndex === currentQuestion.correctAnswer) {
                 btnClass += " correct";
-              } else if (index === selectedOption) {
+              } else if (opt.originalIndex === selectedOption) {
                 btnClass += " wrong";
               }
             }
@@ -410,10 +424,10 @@ function App() {
               <button 
                 key={index} 
                 className={btnClass}
-                onClick={() => handleOptionClick(index)}
+                onClick={() => handleOptionClick(opt.originalIndex)}
                 disabled={showExplanation}
               >
-                {option}
+                {opt.text}
               </button>
             );
           })}
