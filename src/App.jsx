@@ -94,6 +94,22 @@ function App() {
     }
   }, []);
 
+  const currentQuestion = currentQuestionList[currentQuestionIndex];
+
+  // シャッフル用（Hooksのルールに従い、Topレベルで宣言）
+  const shuffledOptions = useMemo(() => {
+    if (!currentQuestion || !currentQuestion.options) return [];
+    const indices = Array.from({ length: currentQuestion.options.length }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return indices.map(idx => ({
+      originalIndex: idx,
+      text: currentQuestion.options[idx]
+    }));
+  }, [currentQuestion?.id]);
+
   const handleStart = () => {
     setIsStarted(true);
   };
@@ -372,7 +388,6 @@ function App() {
   }
 
   // ====== クイズ画面 ======
-  const currentQuestion = currentQuestionList[currentQuestionIndex];
   
   if (!currentQuestion) {
     // データ不整合時の安全フォールバック（クラッシュ防止）
@@ -387,18 +402,6 @@ function App() {
       </div>
     );
   }
-
-  const shuffledOptions = useMemo(() => {
-    const indices = Array.from({ length: currentQuestion.options.length }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
-    return indices.map(idx => ({
-      originalIndex: idx,
-      text: currentQuestion.options[idx]
-    }));
-  }, [currentQuestion?.id]);
 
   const progressPercentage = ((currentQuestionIndex) / currentQuestionList.length) * 100;
   const batchLabel = BATCH_LABELS[currentBatch] || `第${currentBatch + 1}弾`;
