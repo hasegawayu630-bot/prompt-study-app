@@ -374,8 +374,21 @@ function App() {
   // ====== クイズ画面 ======
   const currentQuestion = currentQuestionList[currentQuestionIndex];
   
+  if (!currentQuestion) {
+    // データ不整合時の安全フォールバック（クラッシュ防止）
+    return (
+      <div className="app-container">
+        <div className="card center-content">
+          <h2>データの読み込みに失敗しました</h2>
+          <button className="primary-btn" onClick={resetToHome} style={{marginTop: '20px'}}>
+            トップ画面に戻る
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const shuffledOptions = useMemo(() => {
-    if (!currentQuestion) return [];
     const indices = Array.from({ length: currentQuestion.options.length }, (_, i) => i);
     for (let i = indices.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
